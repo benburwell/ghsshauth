@@ -10,18 +10,17 @@ support all UNIX-like systems. Feel free to send patches.
 ```
 $ git clone git@github.com:benburwell/ghsshauth.git
 $ cd ghsshauth
-$ GOOS=linux GOARCH=amd64 go build
+$ sudo make install
 ```
 
 ## 1. Configure host
 
-Put the binary in `/usr/local/sbin` and make sure it's owned by root and is
-chmodded to 755. Open `/etc/ssh/sshd_config`, find the `AuthorizedKeysCommand`
-line, and change it to:
+Open `/etc/ssh/sshd_config`, find the `AuthorizedKeysCommand` line, and change
+it to:
 
 ```
 AuthorizedKeysCommand /usr/local/sbin/ghsshauth %h
-AuthorizedKeysCommandUser nobody
+AuthorizedKeysCommandUser root
 ```
 
 (the `%h` represents the home directory of the user being authenticated).
@@ -32,6 +31,10 @@ file, one per line. You can begin lines with the `#` character to have them be
 ignored.
 
 **IMPORTANT:** You'll need to make sure that the `AuthorizedKeysCommandUser` has
-read access to the entire path up to your `authorized_github_users` file, i.e.
-your home directory needs to be `chmod 755` as does your `.ssh` directory. Be
-sure that any secret keys in your `.ssh` directory such as `id_rsa` are `chmod 600`!
+read access to the entire path up to your `authorized_github_users` file. The
+easy way to do this is to make set `AuthorizedKeysCommandUser root`. If you'd
+rather use `AuthorizedKeysCommandUser nobody`, then you'll need to make sure
+the `nobody` user has read access to `~/.ssh/authorized_github_users`. This
+means your home directory needs to be `chmod 755` as does your `.ssh` directory.
+**If you go this route, be sure that any secret keys in your `.ssh` directory
+such as `id_rsa` are `chmod 600`, else secret keys they will no longer be!**
