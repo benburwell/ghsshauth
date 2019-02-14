@@ -1,43 +1,23 @@
-package main
+// Package ghsshauth implements functionality necessary to use the GitHub API
+// as an authorization provider for the OpenSSH server's AuthorizedKeysCommand.
+package ghsshauth
 
 import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"path"
 	"strings"
 	"time"
 )
 
-func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "no home directory provided")
-		os.Exit(1)
-	}
-	homedir := os.Args[1]
-	users, err := getUsers(homedir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			os.Exit(0)
-		} else {
-			fmt.Fprintf(os.Stderr, "could not read authorized_github_users: %v\n", err)
-			os.Exit(1)
-		}
-	}
-	keys, err := getUserKeys(users)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "could not get public keys: %v\n", err)
-		os.Exit(1)
-	}
-	for _, key := range keys {
-		fmt.Println(key)
-	}
-	os.Exit(0)
-}
+var httpClient = &http.Client{Timeout: 5 * time.Second}
 
-func getUsers(homedir string) ([]string, error) {
+// ReadAuthorizedGithubUsers attempts to read the authorized_github_users file
+// for the given home directory and returns the usernames it finds as a slice
+// of strings.
+func ReadAuthorizedGithubUsers(homedir string) ([]string, error) {
 	filepath := path.Join(homedir, ".ssh", "authorized_github_users")
 	data, err := ioutil.ReadFile(filepath)
 	if err != nil {
@@ -58,30 +38,28 @@ func getUsers(homedir string) ([]string, error) {
 	return uniqueUsers, nil
 }
 
-// GHKey is a key structure from the GitHub REST API
-type GHKey struct {
-	ID  int    `json:"id"`
-	Key string `json:"key"`
-}
-
-func getUserKeys(users []string) ([]string, error) {
-	client := &http.Client{Timeout: 5 * time.Second}
+// FetchUserKeys fetches the SSH keys for the specified username(s) from the
+// GitHub API
+func FetchUserKeys(users ...string) ([]string, error) {
 	keys := []string{}
 	for _, user := range users {
 		url := fmt.Sprintf("https://api.github.com/users/%s/keys", user)
-		res, err := client.Get(url)
+		res, err := httpClient.Get(url)
 		if err != nil {
 			return nil, err
 		}
 		if res.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("error fetching keys: got http %d %s", res.StatusCode, res.Status)
+			return nil, fmt.Errorf("http error: status %d %s", res.StatusCode, res.Status)
 		}
 		data, err := ioutil.ReadAll(res.Body)
 		defer res.Body.Close()
 		if err != nil {
 			return nil, err
 		}
-		userKeys := []GHKey{}
+		userKeys := []struct {
+			ID  int    `json:"id"`
+			Key string `json:"key"`
+		}{}
 		if err := json.Unmarshal(data, &userKeys); err != nil {
 			return nil, err
 		}
